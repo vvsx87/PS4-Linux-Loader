@@ -154,11 +154,50 @@ void notify(char *message)
 	sceSysUtilSendSystemNotificationWithText(0x81, buffer);
 }
 
+FILE *getbzImage(){
+	FILE *f = NULL;
+	if ((f = fopen("/mnt/usb0/bzImage", "r"))) {printfsocket("OK: open /mnt/usb0/bzImage");return f;}
+	if ((f = fopen("/mnt/usb1/bzImage", "r"))) {printfsocket("OK: open /mnt/usb1/bzImage");return f;}
+	if ((f = fopen("/user/system/boot/bzImage", "r"))) {printfsocket("OK: open /user/system/boot/bzImage");return f;}
+
+	notify("Failed to load bzImage from:\n/mnt/usb0/bzImage\n/mnt/usb1/bzImage\n/user/system/boot/bzImage");
+	return NULL;
+}
+
+FILE *getinitramfs(){
+	FILE *f = NULL;
+	if ((f = fopen("/mnt/usb0/initramfs.cpio.gz", "r"))) {printfsocket("OK: open /mnt/usb0/initramfs.cpio.gz");return f;}
+	if ((f = fopen("/mnt/usb1/initramfs.cpio.gz", "r"))) {printfsocket("OK: open /mnt/usb1/initramfs.cpio.gz");return f;}
+	if ((f = fopen("/user/system/boot/initramfs.cpio.gz", "r"))) {printfsocket("OK: open /user/system/boot/initramfs.cpio.gz");return f;}
+
+	notify("Failed to load initramfs.cpio.gz from:\n/mnt/usb0/initramfs.cpio.gz\n/mnt/usb1/initramfs.cpio.gz\n/user/system/boot/initramfs.cpio.gz");
+	return NULL;
+}
+
+char *getbootargs(){
+        FILE *f = NULL;
+        if ((f = fopen("/mnt/usb0/bootargs.txt", "r"))) {printfsocket("OK: open /mnt/usb0/bootargs.txt");}
+        else if ((f = fopen("/mnt/usb1/bootargs.txt", "r"))) {printfsocket("OK: open /mnt/usb1/bootargs.txt");}
+        else if ((f = fopen("/user/system/boot/bootargs.txt", "r"))) {printfsocket("OK: open /user/system/boot/bootargs.txt");}
+	else{
+	        printfsocket("Failed to load bootargs.txt from:\n/mnt/usb0/bootargs.txt\n/mnt/usb1/bootargs.txt\n/user/system/boot/bootargs.txt");
+		return NULL;
+	}
+	fseek(f, 0L, SEEK_END);
+        size_t size = ftell(f);
+        fseek(f, 0L, SEEK_SET);
+	char *ret = (char*)malloc(size+1);
+        fread(ret, size, 1, f);
+	ret[size] = '\0';
+	fclose(f);
+	return ret;
+}
+
 void usbthing()
 {
 
-	printfsocket("Open bzImage file from USB\n");
-	FILE *fkernel = fopen("/mnt/usb0/bzImage", "r");
+	printfsocket("Open bzImage\n");
+	FILE *fkernel = getbzImage();
 	if(!fkernel)
 	{
 		notify("Error: open /mnt/usb0/bzImage.");
@@ -168,8 +207,8 @@ void usbthing()
 	int kernelsize = ftell(fkernel);
 	fseek(fkernel, 0L, SEEK_SET);
 
-	printfsocket("Open initramfs file from USB\n");
-	FILE *finitramfs = fopen("/mnt/usb0/initramfs.cpio.gz", "r");
+	printfsocket("Open initramfs\n");
+	FILE *finitramfs = getinitramfs();
 	if(!finitramfs)
 	{
 		notify("Error: open /mnt/usb0/initramfs.cpio.gz");
@@ -197,9 +236,11 @@ void usbthing()
 		drm_kms_helper.edid_firmware=edid/my_edid.bin
 	*/
 	
-	char *cmd_line = "panic=0 clocksource=tsc console=tty0 console=ttyS0,115200n8 "
-			"console=uart8250,mmio32,0xd0340000 video=HDMI-A-1:1920x1080-24@60 "
-			"consoleblank=0 net.ifnames=0 drm.debug=0 amdgpu.dpm=0";
+	const char *cmd_line = NULL;
+
+	if ((cmd_line = getbootargs()) == NULL){
+		cmd_line = "drm.edid_firmware=edid/1920x1080.bin panic=0 clocksources=tsc";
+	}
 
 	kernel = malloc(kernelsize);
 	initramfs = malloc(initramfssize);
