@@ -40,17 +40,17 @@ int kpayload(struct thread *td, struct kpayload_args* args){
 	//Reading kernel_base...
 	void* kernel_base = &((uint8_t*)__readmsr(0xC0000082))[-KERN_XFAST_SYSCALL];
 	uint8_t* kernel_ptr = (uint8_t*)kernel_base;
-	void** got_prison0 =   (void**)&kernel_ptr[0x10986a0];
-	void** got_rootvnode = (void**)&kernel_ptr[0x22c1a70];
+	void** got_prison0 =   (void**)&kernel_ptr[0x113D458];
+	void** got_rootvnode = (void**)&kernel_ptr[0x21C3AC0];
 
 	//Resolve kernel functions...
-	int (*copyout)(const void *kaddr, void *uaddr, size_t len) = (void *)(kernel_base + 0x1ea630);
-	int (*printfkernel)(const char *fmt, ...) = (void *)(kernel_base + 0x436040);
-	int (*set_nclk_mem_spd)(int val) = (void *)(kernel_base + 0x30C270);
-	int (*set_pstate)(int val) = (void *)(kernel_base + 0x4CC8A0);
-	int (*set_gpu_freq)(int cu, unsigned int freq) = (void *)(kernel_base + 0x4D2530);
-	int (*update_vddnp)(unsigned int cu) = (void *)(kernel_base + 0x4D2AA0);
-	int (*set_cu_power_gate)(unsigned int cu) = (void *)(kernel_base + 0x4D2C40);
+	int (*copyout)(const void *kaddr, void *uaddr, size_t len) = (void *)(kernel_base + 0x114800);
+	int (*printfkernel)(const char *fmt, ...) = (void *)(kernel_base + 0x307E10);
+	int (*set_nclk_mem_spd)(int val) = (void *)(kernel_base + 0x457E70);
+	int (*set_pstate)(int val) = (void *)(kernel_base + 0x4D2610);
+	int (*set_gpu_freq)(int cu, unsigned int freq) = (void *)(kernel_base + 0x4D01A0);
+	int (*update_vddnp)(unsigned int cu) = (void *)(kernel_base + 0x4D0780);
+	int (*set_cu_power_gate)(unsigned int cu) = (void *)(kernel_base + 0x4D0BA0);
 	
 	cred->cr_uid = 0;
 	cred->cr_ruid = 0;
@@ -79,15 +79,15 @@ int kpayload(struct thread *td, struct kpayload_args* args){
 	uint64_t cr0 = readCr0();
 	writeCr0(cr0 & ~X86_CR0_WP);
 	
-	kernel_ptr[0x10D97E] = 3; //5.05 pstate when shutdown
+	kernel_ptr[0x1D4BDE] = 3; //5.05 pstate when shutdown
 
 	//Kexec init
-	void *DT_HASH_SEGMENT = (void *)(kernel_base+ 0xB1D820); // I know it's for 4.55 but I think it will works
+	void *DT_HASH_SEGMENT = (void *)(kernel_base+ 0xBFF890); // I know it's for 4.55 but I think it will works
 	memcpy(DT_HASH_SEGMENT, kexec_data, kexec_size);
 
 	void (*kexec_init)(void *, void *) = DT_HASH_SEGMENT;
 
-	kexec_init((void *)(kernel_base+0x436040), NULL);
+	kexec_init((void *)(kernel_base+0x307E10), NULL);
 
 	// Say hello and put the kernel base in userland to we can use later
 	printfkernel("PS4 Linux Loader for 5.05 by valentinbreiz\n");
@@ -154,11 +154,50 @@ void notify(char *message)
 	sceSysUtilSendSystemNotificationWithText(0x81, buffer);
 }
 
+FILE *getbzImage(){
+	FILE *f = NULL;
+	if ((f = fopen("/mnt/usb0/bzImage", "r"))) {printfsocket("OK: open /mnt/usb0/bzImage");return f;}
+	if ((f = fopen("/mnt/usb1/bzImage", "r"))) {printfsocket("OK: open /mnt/usb1/bzImage");return f;}
+	if ((f = fopen("/user/system/boot/bzImage", "r"))) {printfsocket("OK: open /user/system/boot/bzImage");return f;}
+
+	notify("Failed to load bzImage from:\n/mnt/usb0/bzImage\n/mnt/usb1/bzImage\n/user/system/boot/bzImage");
+	return NULL;
+}
+
+FILE *getinitramfs(){
+	FILE *f = NULL;
+	if ((f = fopen("/mnt/usb0/initramfs.cpio.gz", "r"))) {printfsocket("OK: open /mnt/usb0/initramfs.cpio.gz");return f;}
+	if ((f = fopen("/mnt/usb1/initramfs.cpio.gz", "r"))) {printfsocket("OK: open /mnt/usb1/initramfs.cpio.gz");return f;}
+	if ((f = fopen("/user/system/boot/initramfs.cpio.gz", "r"))) {printfsocket("OK: open /user/system/boot/initramfs.cpio.gz");return f;}
+
+	notify("Failed to load initramfs.cpio.gz from:\n/mnt/usb0/initramfs.cpio.gz\n/mnt/usb1/initramfs.cpio.gz\n/user/system/boot/initramfs.cpio.gz");
+	return NULL;
+}
+
+char *getbootargs(){
+        FILE *f = NULL;
+        if ((f = fopen("/mnt/usb0/bootargs.txt", "r"))) {printfsocket("OK: open /mnt/usb0/bootargs.txt");}
+        else if ((f = fopen("/mnt/usb1/bootargs.txt", "r"))) {printfsocket("OK: open /mnt/usb1/bootargs.txt");}
+        else if ((f = fopen("/user/system/boot/bootargs.txt", "r"))) {printfsocket("OK: open /user/system/boot/bootargs.txt");}
+	else{
+	        printfsocket("Failed to load bootargs.txt from:\n/mnt/usb0/bootargs.txt\n/mnt/usb1/bootargs.txt\n/user/system/boot/bootargs.txt");
+		return NULL;
+	}
+	fseek(f, 0L, SEEK_END);
+        size_t size = ftell(f);
+        fseek(f, 0L, SEEK_SET);
+	char *ret = (char*)malloc(size+1);
+        fread(ret, size, 1, f);
+	ret[size] = '\0';
+	fclose(f);
+	return ret;
+}
+
 void usbthing()
 {
 
-	printfsocket("Open bzImage file from USB\n");
-	FILE *fkernel = fopen("/mnt/usb0/bzImage", "r");
+	printfsocket("Open bzImage\n");
+	FILE *fkernel = getbzImage();
 	if(!fkernel)
 	{
 		notify("Error: open /mnt/usb0/bzImage.");
@@ -168,8 +207,8 @@ void usbthing()
 	int kernelsize = ftell(fkernel);
 	fseek(fkernel, 0L, SEEK_SET);
 
-	printfsocket("Open initramfs file from USB\n");
-	FILE *finitramfs = fopen("/mnt/usb0/initramfs.cpio.gz", "r");
+	printfsocket("Open initramfs\n");
+	FILE *finitramfs = getinitramfs();
 	if(!finitramfs)
 	{
 		notify("Error: open /mnt/usb0/initramfs.cpio.gz");
@@ -196,10 +235,12 @@ void usbthing()
 	/* if you want edid loading add this cmd:
 		drm_kms_helper.edid_firmware=edid/my_edid.bin
 	*/
+
+	const char *cmd_line = NULL;
 	
-	char *cmd_line = "panic=0 clocksource=tsc console=tty0 console=ttyS0,115200n8 "
-			"console=uart8250,mmio32,0xd0340000 video=HDMI-A-1:1920x1080-24@60 "
-			"consoleblank=0 net.ifnames=0 drm.debug=0 amdgpu.dpm=0";
+	if ((cmd_line = getbootargs()) == NULL){
+		cmd_line = "drm.edid_firmware=edid/1920x1080.bin panic=0 clocksources=tsc";
+	}
 
 	kernel = malloc(kernelsize);
 	initramfs = malloc(initramfssize);

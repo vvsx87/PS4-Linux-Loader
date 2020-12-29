@@ -58,4 +58,4 @@ $(ODIR):
 .PHONY: clean
 
 clean:
-	rm -f $(TARGET) $(ODIR)/*.o
+	rm -f $(shell basename $(CURDIR))_normal.bin $(shell basename $(CURDIR))_debug.bin
