@@ -79,7 +79,7 @@ int kpayload(struct thread *td, struct kpayload_args* args){
 	uint64_t cr0 = readCr0();
 	writeCr0(cr0 & ~X86_CR0_WP);
 	
-	kernel_ptr[0x29A96F] = 3; //5.05 pstate when shutdown
+	kernel_ptr[0x29A970] = 3; //5.05 pstate when shutdown
 
 	//Kexec init
 	void *DT_HASH_SEGMENT = (void *)(kernel_base+ 0xBE3080); // I know it's for 4.55 but I think it will works
