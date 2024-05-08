@@ -59,3 +59,4 @@ $(ODIR):
 
 clean:
 	rm -f $(shell basename $(CURDIR))_normal.bin $(shell basename $(CURDIR))_debug.bin
+	rm -rf build
