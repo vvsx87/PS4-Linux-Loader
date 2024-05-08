@@ -1,5 +1,5 @@
 # PS4 Linux Loader
-A simple payload that let you run Linux on your 5.05 PS4
+The port to 11.0 is currently incomplete. The kexec syscall gets registered successfully and the kernel + initramfs load, but when trying to reboot into the linux environment the console will stay at a black screen, then panic and turn off. I currently don't have a way of really debugging the crash because my PS4 currently doesn't have a UART installed. Feel free to contribute or contact me if you have a console on 11.0 with a working UART.
 
 ## How to build
 I use https://github.com/valentinbreiz/ps4-payload-sdk to compile it. You also need to compile https://github.com/fail0verflow/ps4-kexec and place 'kexec.bin' into this folder. Compile kexec with 'make CFLAG='-DPS4_5_05 -DKASLR -DNO_SYMTAB'.
